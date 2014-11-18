@@ -1,134 +1,111 @@
 package main
 
 import (
-    "gopkg.in/yaml.v2"
-    "io/ioutil"
     "fmt"
+    "os"
+    "strconv"
     "encoding/hex"
     "encoding/binary"
     "github.com/fuzxxl/nfc/2.0/nfc"    
     "github.com/fuzxxl/freefare/0.3/freefare"
     "./keydiversification"
+    "./helpers"
 )
 
-// TODO: move to a separate helper module
-func string_to_aeskey(keydata_str string) (*freefare.DESFireKey, error) {
-    keydata := new([16]byte)
-    to_keydata, err := hex.DecodeString(keydata_str)
-    if err != nil {
-        key := freefare.NewDESFireAESKey(*keydata, 0)
-        return key, err
-    }
-    copy(keydata[0:], to_keydata)
-    key := freefare.NewDESFireAESKey(*keydata, 0)
-    return key,nil
-}
 
-func bytes_to_aeskey(source []byte) (*freefare.DESFireKey) {
-    keydata := new([16]byte)
-    copy(keydata[0:], source)
-    key := freefare.NewDESFireAESKey(*keydata, 0)
-    return key
-}
-
-func string_to_byte(source string) (byte, error) {
-    bytearray, err := hex.DecodeString(source)
-    if err != nil {
-        return 0x0, err
-    }
-    return bytearray[0], nil
-}
 
 func main() {
-    keys_data, err := ioutil.ReadFile("keys.yaml")
+    if (len(os.Args) < 3) {
+        fmt.Println("Usage:")
+        fmt.Println(fmt.Sprintf("  %s member-id-as-decimal acl-value-as-hex", os.Args[0]))
+        os.Exit(1)
+    }
+
+    newmid64, error := strconv.ParseUint(os.Args[1], 10, 16)
+    if (error != nil) {
+         panic(error)
+    }
+    newmid := uint16(newmid64)
+
+    newacl64, error := strconv.ParseUint(os.Args[2], 16, 64)
+    if (error != nil) {
+         panic(error)
+    }
+    newacl := uint32(newacl64)
+
+    newaclbytes := make([]byte, 4)
+    n := binary.PutUvarint(newaclbytes, uint64(newacl))
+    if (n < 0) {
+        panic(fmt.Sprintf("binary.PutUvarint returned %d", n))
+    }
+    newmidbytes := make([]byte, 2)
+    n = binary.PutUvarint(newmidbytes, uint64(newmid))
+    if (n < 0) {
+        panic(fmt.Sprintf("binary.PutUvarint returned %d", n))
+    }
+
+
+    keymap, err := helpers.LoadYAMLFile("keys.yaml")
     if err != nil {
         panic(err)
     }
 
-    keymap := make(map[interface{}]interface{});
-    err = yaml.Unmarshal([]byte(keys_data), &keymap);
+    appmap, err := helpers.LoadYAMLFile("apps.yaml")
     if err != nil {
         panic(err)
     }
 
-    apps_data, err := ioutil.ReadFile("apps.yaml")
+    // Application-id
+    aid, err := helpers.String2aid(appmap["hacklab_acl"].(map[interface{}]interface{})["aid"].(string))
     if err != nil {
         panic(err)
     }
 
-    appmap := make(map[interface{}]interface{});
-    err = yaml.Unmarshal([]byte(apps_data), &appmap);
-    if err != nil {
-        panic(err)
-    }
-
-    // Application-id from config
-    aidbytes, err := hex.DecodeString(appmap["hacklab_acl"].(map[interface{}]interface{})["aid"].(string))
-    if err != nil {
-        panic(err)
-    }
-    aidint, n := binary.Uvarint(aidbytes)
-    if n <= 0 {
-        panic(fmt.Sprintf("binary.Uvarint returned %d", n))
-    }
-    aid := freefare.NewDESFireAid(uint32(aidint))
-    //fmt.Println(aid)
     // Needed for diversification
+    aidbytes := helpers.Aid2bytes(aid)
     sysid, err := hex.DecodeString(appmap["hacklab_acl"].(map[interface{}]interface{})["sysid"].(string))
     if err != nil {
         panic(err)
     }
 
     // Key id numbers from config
-    uid_read_key_id, err := string_to_byte(appmap["hacklab_acl"].(map[interface{}]interface{})["uid_read_key_id"].(string))
+    uid_read_key_id, err := helpers.String2byte(appmap["hacklab_acl"].(map[interface{}]interface{})["uid_read_key_id"].(string))
     if err != nil {
         panic(err)
     }
-    acl_read_key_id, err := string_to_byte(appmap["hacklab_acl"].(map[interface{}]interface{})["acl_read_key_id"].(string))
+    acl_read_key_id, err := helpers.String2byte(appmap["hacklab_acl"].(map[interface{}]interface{})["acl_read_key_id"].(string))
     if err != nil {
         panic(err)
     }
-    acl_write_key_id, err := string_to_byte(appmap["hacklab_acl"].(map[interface{}]interface{})["acl_write_key_id"].(string))
+    prov_key_id, err := helpers.String2byte(appmap["hacklab_acl"].(map[interface{}]interface{})["provisioning_key_id"].(string))
     if err != nil {
         panic(err)
     }
-    prov_key_id, err := string_to_byte(appmap["hacklab_acl"].(map[interface{}]interface{})["provisioning_key_id"].(string))
+    acl_file_id, err := helpers.String2byte(appmap["hacklab_acl"].(map[interface{}]interface{})["acl_file_id"].(string))
     if err != nil {
         panic(err)
     }
-
-    // Defaul (null) key
-    nullkeydata := new([8]byte)
-    defaultkey := freefare.NewDESFireDESKey(*nullkeydata)
-
-    // New card master key
-    new_master_key, err := string_to_aeskey(keymap["card_master"].(string))
+    mid_file_id, err := helpers.String2byte(appmap["hacklab_acl"].(map[interface{}]interface{})["mid_file_id"].(string))
     if err != nil {
         panic(err)
     }
-    //fmt.Println(new_master_key)
 
     // The static app key to read UID
-    uid_read_key, err := string_to_aeskey(keymap["uid_read_key"].(string))
+    uid_read_key, err := helpers.String2aeskey(keymap["uid_read_key"].(string))
     if err != nil {
         panic(err)
     }
     //fmt.Println(uid_read_key)
 
     // Bases for the diversified keys    
-    prov_key_base, err := hex.DecodeString(keymap["prov_master"].(string))
-    if err != nil {
-        panic(err)
-    }
     acl_read_base, err := hex.DecodeString(keymap["acl_read_key"].(string))
     if err != nil {
         panic(err)
     }
-    acl_write_base, err := hex.DecodeString(keymap["acl_write_key"].(string))
+    prov_key_base, err := hex.DecodeString(keymap["prov_master"].(string))
     if err != nil {
         panic(err)
     }
-
 
     // Open device and get tags list
     d, err := nfc.Open("");
@@ -162,30 +139,17 @@ func main() {
         }
         fmt.Println("Done");
 
-        fmt.Println("Authenticating");
-        error = desfiretag.Authenticate(0,*defaultkey)
+        fmt.Println("Selecting application");
+        error = desfiretag.SelectApplication(aid);
         if error != nil {
-            fmt.Println("Failed, trying agin with new key")
-            error = desfiretag.Authenticate(0,*new_master_key)
-            if error != nil {
-                panic(error)
-            }
-            fmt.Println("Changing key back to default")
-            error = desfiretag.ChangeKey(0,  *defaultkey, *new_master_key);
-            if error != nil {
-                panic(error)
-            }
-            fmt.Println("Re-auth with default key")
-            error = desfiretag.Authenticate(0,*defaultkey)
-            if error != nil {
-                panic(error)
-            }
-            fmt.Println("Formatting (to get a clean state)")
-            error = desfiretag.FormatPICC()
-            if error != nil {
-                panic(error)
-            }
-            return
+            panic(error)
+        }
+        fmt.Println("Done");
+
+        fmt.Println("Authenticating");
+        error = desfiretag.Authenticate(uid_read_key_id,*uid_read_key)
+        if error != nil {
+            panic(error)
         }
         fmt.Println("Done");
 
@@ -198,126 +162,111 @@ func main() {
         if error != nil {
             panic(error)
         }
+        fmt.Println("realuid:", hex.EncodeToString(realuid));
 
         // Calculate the diversified keys
-        prov_key_bytes, err := keydiversification.AES128(prov_key_base, aidbytes, realuid, sysid)
-        if err != nil {
-            panic(err)
-        }
-        prov_key := bytes_to_aeskey(prov_key_bytes)
         acl_read_bytes, err := keydiversification.AES128(acl_read_base, aidbytes, realuid, sysid)
         if err != nil {
             panic(err)
         }
-        acl_read_key := bytes_to_aeskey(acl_read_bytes)
-        acl_write_bytes, err := keydiversification.AES128(acl_write_base, aidbytes, realuid, sysid)
+        acl_read_key := helpers.Bytes2aeskey(acl_read_bytes)
+
+        prov_key_bytes, err := keydiversification.AES128(prov_key_base, aidbytes, realuid, sysid)
         if err != nil {
             panic(err)
         }
-        acl_write_key := bytes_to_aeskey(acl_write_bytes)
+        prov_key := helpers.Bytes2aeskey(prov_key_bytes)
 
-
-        fmt.Println("Changing default master key");
-        error = desfiretag.ChangeKey(0, *new_master_key, *defaultkey);
-        if error != nil {
-            panic(error)
-        }
-        fmt.Println("Done");
-
-        /**
-         * This is not needed for creating the application and does not help when changing application keys
-        fmt.Println("Re-auth with new key")
-        error = desfiretag.Authenticate(0,*new_master_key)
-        if error != nil {
-            panic(error)
-        }
-         */
-
-        fmt.Println("Creating application");
-        // TODO:Figure out what the settings byte (now hardcoded to 0xFF as it was in libfreefare example code) actually does
-        error = desfiretag.CreateApplication(aid, 0xFF, 6 | freefare.CryptoAES);
-        if error != nil {
-            panic(error)
-        }
-        fmt.Println("Done");
-
-
-        fmt.Println("Selecting application");
-        // TODO:Figure out what the settings byte (now hardcoded to 0xFF as it was in libfreefare exampkle code) actually does
-        error = desfiretag.SelectApplication(aid);
-        if error != nil {
-            panic(error)
-        }
-        fmt.Println("Done");
-
-        /**
-         * Does not work
-        fmt.Println("Re-auth with new master key")
-        error = desfiretag.Authenticate(0,*new_master_key)
-        if error != nil {
-            panic(error)
-        }
-         */
-
-        /**
-         * Also does not work
-        fmt.Println("Re-auth with default key")
-        error = desfiretag.Authenticate(0,*defaultkey)
-        if error != nil {
-            panic(error)
-        }
-         */
-
-        fmt.Println("Changing provisioning key");
-        error = desfiretag.ChangeKey(prov_key_id, *prov_key, *defaultkey);
-        if error != nil {
-            panic(error)
-        }
-        fmt.Println("Done");
-
-        fmt.Println("Re-auth with new provisioning key")
-        error = desfiretag.Authenticate(prov_key_id,*prov_key)
+        fmt.Println("Re-auth with ACL read key")
+        error = desfiretag.Authenticate(acl_read_key_id,*acl_read_key)
         if error != nil {
             panic(error)
         }
 
-
-        fmt.Println("Changing static UID reading key");
-        error = desfiretag.ChangeKey(uid_read_key_id, *uid_read_key, *defaultkey);
+        aclbytes := make([]byte, 4)
+        fmt.Println("Reading ACL data file")
+        bytesread, err := desfiretag.ReadData(acl_file_id, 0, aclbytes)
         if error != nil {
             panic(error)
         }
-        fmt.Println("Done");
+        if (bytesread <= 0) {
+            fmt.Println(fmt.Sprintf("ReadData read %d bytes", bytesread))
+            continue
+        }
+        if (bytesread < 4) {
+            //panic(fmt.Sprintf("ReadData read %d bytes, 4 expected", bytesread))
+            fmt.Println(fmt.Sprintf("ReadData read %d bytes, 4 expected", bytesread))
+        }
+        acl64, n := binary.Uvarint(aclbytes)
+        if n <= 0 {
+            panic(fmt.Sprintf("binary.Uvarint returned %d", n))
+        }
+        acl := uint32(acl64)
+        fmt.Println("acl:", acl)
 
-        fmt.Println("Changing ACL reading key");
-        error = desfiretag.ChangeKey(acl_read_key_id, *acl_read_key, *defaultkey);
+        midbytes := make([]byte, 2)
+        fmt.Println("Reading member-id data file")
+        bytesread, err = desfiretag.ReadData(mid_file_id, 0, midbytes)
         if error != nil {
             panic(error)
         }
-        fmt.Println("Done");
-
-        fmt.Println("Changing ACL writing key");
-        error = desfiretag.ChangeKey(acl_write_key_id, *acl_write_key, *defaultkey);
-        if error != nil {
-            panic(error)
+        // TODO: make a helper that repeatedly reads until we're past the buffer or readbytes == 0
+        if (bytesread < 2) {
+            //panic(fmt.Sprintf("ReadData read %d bytes, 2 expected", bytesread))
+            fmt.Println(fmt.Sprintf("ReadData read %d bytes, 2 expected", bytesread))
         }
-        fmt.Println("Done");
-
-
-        fmt.Println("Creating ACL data file");
-        error = desfiretag.CreateDataFile(0, freefare.Enciphered, freefare.MakeDESFireAccessRights(acl_read_key_id, acl_write_key_id, prov_key_id, prov_key_id), 8, false)
-        if error != nil {
-            panic(error)
+        mid64, n := binary.Uvarint(midbytes)
+        if n <= 0 {
+            panic(fmt.Sprintf("binary.Uvarint returned %d", n))
         }
-        fmt.Println("Done");
+        mid := uint16(mid64)
+        fmt.Println("mid:", mid)
 
-        // Not sure if this is actually needed
-        fmt.Println("Committing");
-        error = desfiretag.CommitTransaction()
-        if error != nil {
-            panic(error)
+        if (mid == newmid && acl == newacl) {
+            // Do nothing
+            fmt.Println("No need to update ACL and member-id")
+        } else {
+
+            fmt.Println("Re-auth with provisioning key")
+            error = desfiretag.Authenticate(prov_key_id,*prov_key)
+            if error != nil {
+                panic(error)
+            }
+            fmt.Println("Done");
+            
+            fmt.Println("Writing ACL file")
+            bytewritten, error := desfiretag.WriteData(acl_file_id, 0, newaclbytes)
+            if error != nil {
+                panic(error)
+            }
+            if (bytewritten < 4) {
+                //panic(fmt.Sprintf("WriteData wrote %d bytes, 4 expected", bytewritten))
+                fmt.Println(fmt.Sprintf("WriteData wrote %d bytes, 4 expected", bytewritten))
+            }
+            fmt.Println("Done");
+
+            fmt.Println("Writing member-id file")
+            bytewritten, error = desfiretag.WriteData(mid_file_id, 0, newmidbytes)
+            if error != nil {
+                panic(error)
+            }
+            if (bytewritten < 2) {
+                //panic(fmt.Sprintf("WriteData wrote %d bytes, 2 expected", bytewritten))
+                fmt.Println(fmt.Sprintf("WriteData wrote %d bytes, 2 expected", bytewritten))
+            }
+            fmt.Println("Done");
+
+            /**
+             * For some reason this gives the dreaded "unknown error"
+            fmt.Println("Committing");
+            error = desfiretag.CommitTransaction()
+            if error != nil {
+                panic(error)
+            }
+            fmt.Println("Done");
+             */
         }
-        fmt.Println("Done");
+
 
 
         fmt.Println("Disconnecting");
@@ -326,6 +275,12 @@ func main() {
             panic(error)
         }
         fmt.Println("Done");
+
+        fmt.Println("*** BEGIN: SAVE THIS INFO ***");
+        fmt.Println(fmt.Sprintf("  Member id: %d", newmid))
+        fmt.Println(fmt.Sprintf("  Card UID: %s", realuid_str))
+        fmt.Println("*** END: SAVE THIS INFO ***");
+
     }
 
 }
