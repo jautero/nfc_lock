@@ -15,7 +15,7 @@
 #include <nfc/nfc.h>
 #include <freefare.h>
 
-#include "smart_node_config.h"
+#include "pre-personalize_config.h"
 #include "keydiversification.h"
 #include "helpers.h"
 
@@ -36,21 +36,15 @@ static void s_catch_signals (void)
     sigaction (SIGTERM, &action, NULL);
 }
 
-int handle_tag(MifareTag tag, bool *tag_valid)
+int handle_tag(MifareTag tag, bool *tag_valid, uint32_t newacl, uint32_t newmid)
 {
     const uint8_t errlimit = 3;
     int err = 0;
     uint8_t errcnt = 0;
     bool connected = false;
-    MifareDESFireAID aid;
     MifareDESFireKey key;
     char *realuid_str = NULL;
-    uint8_t diversified_key_data[16];
-    uint32_t acl;
-    uint32_t mid;
-    size_t read;
-    uint8_t uint32bytes[4];
-    
+    MifareDESFireAID aid;
 
 RETRY:
     if (err != 0)
@@ -86,6 +80,7 @@ RETRY:
     printf("done\n");
     connected = true;
 
+
     printf("Selecting application, ");
     aid = mifare_desfire_aid_new(nfclock_aid[0] | (nfclock_aid[1] << 8) | (nfclock_aid[2] << 16));
     err = mifare_desfire_select_application(tag, aid);
@@ -93,21 +88,20 @@ RETRY:
     {
         free(aid);
         aid = NULL;
-        printf("Can't select application.");
         goto RETRY;
     }
     printf("done\n");
     free(aid);
     aid = NULL;
 
-    printf("Authenticating, ");
-    key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_uid_key, 0x0);
-    err = mifare_desfire_authenticate(tag, nfclock_uid_keyid, key);
+
+    printf("Re-Authenticating (AMK), ");
+    key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_amk, 0x0);
+    err = mifare_desfire_authenticate(tag, 0, key);
     if (err < 0)
     {
         free(key);
         key = NULL;
-        printf("Can't Authenticate. ");
         goto RETRY;
     }
     free(key);
@@ -118,65 +112,31 @@ RETRY:
     err = mifare_desfire_get_card_uid(tag, &realuid_str);
     if (err < 0)
     {
-        printf("Can't get real UID. ");
         goto RETRY;
     }
     printf("%s\n", realuid_str);
 
-    err = nfclock_diversify_key_aes128((uint8_t *)nfclock_acl_read_key_base, (uint8_t*)nfclock_aid, realuid_str, (uint8_t*)nfclock_sysid, sizeof(nfclock_sysid), diversified_key_data);
-    if (err != 0)
-    {
-        printf("Can't calculate diversified key, failing\n");
-        goto FAIL;
-    }
-
-    printf("Re-auth with ACL read key, ");
-    key = mifare_desfire_aes_key_new_with_version((uint8_t*)diversified_key_data, 0x0);
-    err = mifare_desfire_authenticate(tag, nfclock_acl_read_keyid, key);
+    printf("Writing ACL value (0x%lx), ", (unsigned long)newacl);
+    err = nfclock_write_uint32(tag, nfclock_acl_file_id, newacl);
     if (err < 0)
     {
-        free(key);
-        key = NULL;
-        printf("Can't Authenticate. ");
         goto RETRY;
     }
-    free(key);
-    key = NULL;
     printf("done\n");
 
-    printf("Reading member-id file, ");
-    /** 
-     * This triggers stack-smashing detector for some reason...
-    err = nfclock_read_uint32(tag, nfclock_mid_file_id, &mid);
-    if (err < 0)
-    {
-        goto RETRY;
-    }
-     */
-    read = mifare_desfire_read_data(tag, nfclock_mid_file_id, 0, 4, uint32bytes);
-    if (read < 4)
-    {
-        goto RETRY;
-    }
-    mid = (uint32bytes[0] | (uint32bytes[1] << 8) | (uint32bytes[2] << 16) | (uint32bytes[3] << 24));
-    printf("done, got 0x%lx \n", (unsigned long)mid);
 
-    printf("Reading ACL file, ");
-    /** 
-     * This triggers stack-smashing detector for some reason...
-    err = nfclock_read_uint32(tag, nfclock_acl_file_id, &acl);
+    printf("Writing member-id value (0x%lx), ", (unsigned long)newmid);
+    err = nfclock_write_uint32(tag, nfclock_mid_file_id, newmid);
     if (err < 0)
     {
         goto RETRY;
     }
-     */
-    read = mifare_desfire_read_data(tag, nfclock_acl_file_id, 0, 4, uint32bytes);
-    if (read < 4)
-    {
-        goto RETRY;
-    }
-    acl = (uint32bytes[0] | (uint32bytes[1] << 8) | (uint32bytes[2] << 16) | (uint32bytes[3] << 24));
-    printf("done, got 0x%lx \n", (unsigned long)acl);
+    printf("done\n");
+
+    printf("\n*** Write the following down ***\n");
+    printf("  UID: %s\n", realuid_str);
+    printf("  MID: 0x%lx\n", (unsigned long)newmid);
+    printf("*** Write the above down ***\n\n");
 
     // All checks done seems good
     if (realuid_str)
@@ -185,8 +145,9 @@ RETRY:
         realuid_str = NULL;
     }
     mifare_desfire_disconnect(tag);
-    *tag_valid = true;
+    *tag_valid = true; 
     return 0;
+
 
 FAIL:
     if (realuid_str)
@@ -210,6 +171,8 @@ struct thread_data {
    MifareTag tag;
    bool tag_valid;
    int  err;
+   uint32_t newacl;
+   uint32_t newmid;
 };
 
 void *handle_tag_pthread(void *threadarg)
@@ -222,7 +185,7 @@ void *handle_tag_pthread(void *threadarg)
     struct thread_data *my_data;
     my_data = (struct thread_data *) threadarg;
     // Start processing
-    my_data->err = handle_tag(my_data->tag, &my_data->tag_valid);
+    my_data->err = handle_tag(my_data->tag, &my_data->tag_valid, my_data->newacl, my_data->newmid);
 
     // Signal done and return
     pthread_cond_signal(&tag_done);
@@ -323,7 +286,22 @@ int main(int argc, char *argv[])
 
             printf("Found DESFire tag %s\n", tag_uid_str);
             free (tag_uid_str);
+            
 
+            // Use this struct to pass data between thread and main
+            struct thread_data tagdata;
+            tagdata.tag = tags[i];
+            tagdata.newacl = 0;
+            tagdata.newmid = 0;
+            
+            // Asking for mid (ACL is redundant, we can update it at smart node anyway)
+            char input_buffer[20];
+            fputs("enter mid (in hex format eg 0xdeadbeef): ", stdout);
+            fflush(stdout);
+            if ( fgets(input_buffer, sizeof input_buffer, stdin) != NULL )
+            {
+                tagdata.newmid = strtoul(input_buffer, NULL, 0);
+            }
 
             // pthreads initialization stuff
             struct timespec abs_time;
@@ -332,11 +310,8 @@ int main(int argc, char *argv[])
         
             /* pthread cond_timedwait expects an absolute time to wait until */
             clock_gettime(CLOCK_REALTIME, &abs_time);
-            abs_time.tv_sec += 1;
+            abs_time.tv_sec += 2;
         
-            // Use this struct to pass data between thread and main
-            struct thread_data tagdata;
-            tagdata.tag = tags[i];
         
             err = pthread_create(&tid, NULL, handle_tag_pthread, (void *)&tagdata);
             if (err != 0)
@@ -376,15 +351,15 @@ int main(int argc, char *argv[])
         tags = NULL;
         if (valid_found)
         {
-            printf("OK: valid tag found\n");
+            printf("OK: tag personalized\n");
+            usleep(2500 * 1000);
         }
         else
         {
-            printf("ERROR: NO valid tag found\n");
+            printf("ERROR: problem personalizing\n");
+            usleep(500 * 1000);
         }
 
-        // And if we had tags then wait half a sec before resuming polling again
-        usleep(500 * 1000);
     }
 
     nfc_close (device);

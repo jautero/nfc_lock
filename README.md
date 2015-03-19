@@ -11,45 +11,19 @@ Ubuntu 14.04 has libnfc but no libfreefare, use [this PPA](https://launchpad.net
     sudo apt-get update
     sudo apt-get install libnfc5 libnfc-bin libnfc-pn53x-examples libnfc-examples
     sudo apt-get install libfreefare0 libfreefare-bin
+    sudo apt-get install python-zmq python-yaml python-tornado
+
+`python-yaml` and `python-tornado` can be installed to virtualenv (esp tornado might be better to install via pip even if not to virtualenv the deb pulls unneccessary dependencies), zmq will be painful to install via pip, use the system package.
 
 ### For compiling
 
-For the C programs and possibly the Go libraries.
+For the C programs.
 
-    sudo apt-get install libfreefare-dev libnfc-dev libssl-dev pkg-config
+    sudo apt-get install libfreefare-dev libnfc-dev libssl-dev pkg-config libzmq-dev
 
 ### RasPi
 
 Install the debs from [./raspi/debs/](./raspi/debs/) (or compile them using source debs from Jessie)
-
-## Go
-
-Install Go and some deps you are going to need when fetching Go libraries
-
-    sudo apt-get install golang mercurial git-core
-
-Make sure your GOPATH is set
-
-    mkdir $HOME/.go
-    export GOPATH=$HOME/.go
-    export PATH=$PATH:$GOPATH/bin
-
-Install library dependencies
-
-    go get github.com/fuzxxl/nfc/2.0/nfc
-    go get github.com/fuzxxl/freefare/0.3/freefare
-    go get gopkg.in/yaml.v2
-    go get github.com/jacobsa/crypto/cmac
-    go get github.com/mattn/go-sqlite3
-    go get github.com/davecheney/gpio
-
-### RasPi
-
-See https://xivilization.net/~marek/blog/2014/07/05/go-1-dot-3-for-raspberry-pi/ for Go 1.3 (1.0 will not work)
-
-    sudo apt-get install apt-transport-https
-
-Then edit `/etc/apt/sources.list.d/xivilization-raspbian.list` and switch to https
 
 ## Terms
 
@@ -76,3 +50,9 @@ In reality you will generate this file based on your person registry (keep track
 ## Hacking
 
 Remember to valgrind your C programs (`valgrind -v --leak-check=yes  myprog args`) at the same time as you do general functionality testing.
+
+### RasPi
+
+It seems Valgrind does not (and will not) support some instructions we use to talk with the NFC chips, see (this stackoverflow)[valgrindworkaround] for a workaround.
+
+[valgrindworkaround]: http://stackoverflow.com/questions/20066215/valgrind-unrecognizes-memcmp-instruction-in-raspberry-pi#comment-29892760

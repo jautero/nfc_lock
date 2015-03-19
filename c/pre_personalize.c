@@ -15,9 +15,20 @@
 #include <nfc/nfc.h>
 #include <freefare.h>
 
-#include "smart_node_config.h"
+#include "pre-personalize_config.h"
 #include "keydiversification.h"
 #include "helpers.h"
+
+
+uint8_t key_data_null[8]  = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+MifareDESFireKey null_des_key;
+
+uint8_t key_data_null16[16]  = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+MifareDESFireKey null_aes_key;
+
+
+
+
 
 // Catch SIGINT and SIGTERM so we can do a clean exit
 static int s_interrupted = 0;
@@ -42,15 +53,10 @@ int handle_tag(MifareTag tag, bool *tag_valid)
     int err = 0;
     uint8_t errcnt = 0;
     bool connected = false;
-    MifareDESFireAID aid;
     MifareDESFireKey key;
     char *realuid_str = NULL;
+    MifareDESFireAID aid;
     uint8_t diversified_key_data[16];
-    uint32_t acl;
-    uint32_t mid;
-    size_t read;
-    uint8_t uint32bytes[4];
-    
 
 RETRY:
     if (err != 0)
@@ -86,28 +92,44 @@ RETRY:
     printf("done\n");
     connected = true;
 
-    printf("Selecting application, ");
-    aid = mifare_desfire_aid_new(nfclock_aid[0] | (nfclock_aid[1] << 8) | (nfclock_aid[2] << 16));
-    err = mifare_desfire_select_application(tag, aid);
+    printf("Authenticating (null key), ");
+    err = mifare_desfire_authenticate(tag, 0x0, null_des_key);
     if (err < 0)
     {
-        free(aid);
-        aid = NULL;
-        printf("Can't select application.");
         goto RETRY;
     }
     printf("done\n");
-    free(aid);
-    aid = NULL;
 
-    printf("Authenticating, ");
-    key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_uid_key, 0x0);
-    err = mifare_desfire_authenticate(tag, nfclock_uid_keyid, key);
+    printf("Enabling random id, ");
+    err = mifare_desfire_set_configuration(tag, false, true);
+    if (err < 0)
+    {
+        goto RETRY;
+    }
+    printf("done\n");
+
+    printf("Changing Card Master Key, ");
+    key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_cmk, 0x0);
+    err = mifare_desfire_change_key(tag, 0, key, null_des_key);
+    //err = mifare_desfire_set_default_key(tag, key);
     if (err < 0)
     {
         free(key);
         key = NULL;
-        printf("Can't Authenticate. ");
+        goto RETRY;
+    }
+    free(key);
+    key = NULL;
+    printf("done\n");
+
+    // Seems to be unneccessary for creating application (probably because card default settings allow creating new applications without authentication...)
+    printf("Re-Authenticating (master key), ");
+    key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_cmk, 0x0);
+    err = mifare_desfire_authenticate(tag, 0x0, key);
+    if (err < 0)
+    {
+        free(key);
+        key = NULL;
         goto RETRY;
     }
     free(key);
@@ -118,65 +140,164 @@ RETRY:
     err = mifare_desfire_get_card_uid(tag, &realuid_str);
     if (err < 0)
     {
-        printf("Can't get real UID. ");
         goto RETRY;
     }
     printf("%s\n", realuid_str);
 
-    err = nfclock_diversify_key_aes128((uint8_t *)nfclock_acl_read_key_base, (uint8_t*)nfclock_aid, realuid_str, (uint8_t*)nfclock_sysid, sizeof(nfclock_sysid), diversified_key_data);
-    if (err != 0)
+    printf("Setting application default key, ");
+    err = mifare_desfire_set_default_key(tag, null_aes_key);
+    if (err < 0)
     {
-        printf("Can't calculate diversified key, failing\n");
-        goto FAIL;
+        goto RETRY;
     }
+    printf("done\n");
 
-    printf("Re-auth with ACL read key, ");
-    key = mifare_desfire_aes_key_new_with_version((uint8_t*)diversified_key_data, 0x0);
-    err = mifare_desfire_authenticate(tag, nfclock_acl_read_keyid, key);
+    printf("Creating application, ");
+    aid = mifare_desfire_aid_new(nfclock_aid[0] | (nfclock_aid[1] << 8) | (nfclock_aid[2] << 16));
+    // Settings are: only master key may change other keys, configuration is not locked, authentication required for everything, AMK change allowed and we have 4 keys in the application
+    err = mifare_desfire_create_application_aes(tag, aid, nfclock_applicationsettings(0, false, true, true, true), 4);
+    if (err < 0)
+    {
+        free(aid);
+        aid = NULL;
+        goto RETRY;
+    }
+    printf("done\n");
+    free(aid);
+    aid = NULL;
+
+    printf("Selecting application, ");
+    aid = mifare_desfire_aid_new(nfclock_aid[0] | (nfclock_aid[1] << 8) | (nfclock_aid[2] << 16));
+    err = mifare_desfire_select_application(tag, aid);
+    if (err < 0)
+    {
+        free(aid);
+        aid = NULL;
+        goto RETRY;
+    }
+    printf("done\n");
+    free(aid);
+    aid = NULL;
+
+
+    printf("Re-Authenticating (null AES key), ");
+    err = mifare_desfire_authenticate(tag, 0, null_aes_key);
+    if (err < 0)
+    {
+        goto RETRY;
+    }
+    printf("done\n");
+
+
+    printf("Changing Application Master Key, ");
+    key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_amk, 0x0);
+    err = mifare_desfire_change_key(tag, 0, key, null_aes_key);
     if (err < 0)
     {
         free(key);
         key = NULL;
-        printf("Can't Authenticate. ");
         goto RETRY;
     }
     free(key);
     key = NULL;
     printf("done\n");
 
-    printf("Reading member-id file, ");
-    /** 
-     * This triggers stack-smashing detector for some reason...
-    err = nfclock_read_uint32(tag, nfclock_mid_file_id, &mid);
+    printf("Re-Authenticating (AMK), ");
+    key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_amk, 0x0);
+    err = mifare_desfire_authenticate(tag, 0, key);
     if (err < 0)
     {
+        free(key);
         goto RETRY;
     }
-     */
-    read = mifare_desfire_read_data(tag, nfclock_mid_file_id, 0, 4, uint32bytes);
-    if (read < 4)
-    {
-        goto RETRY;
-    }
-    mid = (uint32bytes[0] | (uint32bytes[1] << 8) | (uint32bytes[2] << 16) | (uint32bytes[3] << 24));
-    printf("done, got 0x%lx \n", (unsigned long)mid);
+    free(key);
+    printf("done\n");
 
-    printf("Reading ACL file, ");
-    /** 
-     * This triggers stack-smashing detector for some reason...
-    err = nfclock_read_uint32(tag, nfclock_acl_file_id, &acl);
+    printf("Changing UID read key, ");
+    key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_uid_key, 0x0);
+    err = mifare_desfire_change_key(tag, nfclock_uid_keyid, key, null_aes_key);
+    if (err < 0)
+    {
+        free(key);
+        key = NULL;
+        goto RETRY;
+    }
+    free(key);
+    key = NULL;
+    printf("done\n");
+
+
+    err = nfclock_diversify_key_aes128((uint8_t *)nfclock_acl_read_key_base, (uint8_t*)nfclock_aid, realuid_str, (uint8_t*)nfclock_sysid, sizeof(nfclock_sysid), diversified_key_data);
+    if (err != 0)
+    {
+        printf("Can't calculate diversified ACL read key, failing\n");
+        goto FAIL;
+    }
+    printf("Changing ACL read key, ");
+    key = mifare_desfire_aes_key_new_with_version((uint8_t *)&diversified_key_data, 0x0);
+    err = mifare_desfire_change_key(tag, nfclock_acl_read_keyid, key, null_aes_key);
+    if (err < 0)
+    {
+        free(key);
+        key = NULL;
+        goto RETRY;
+    }
+    free(key);
+    key = NULL;
+    printf("done\n");
+
+
+    err = nfclock_diversify_key_aes128((uint8_t *)nfclock_acl_write_key_base, (uint8_t*)nfclock_aid, realuid_str, (uint8_t*)nfclock_sysid, sizeof(nfclock_sysid), diversified_key_data);
+    if (err != 0)
+    {
+        printf("Can't calculate diversified ACL write key, failing\n");
+        goto FAIL;
+    }
+    printf("Changing ACL write key, ");
+    key = mifare_desfire_aes_key_new_with_version((uint8_t *)&diversified_key_data, 0x0);
+    err = mifare_desfire_change_key(tag, nfclock_acl_write_keyid, key, null_aes_key);
+    if (err < 0)
+    {
+        free(key);
+        key = NULL;
+        goto RETRY;
+    }
+    free(key);
+    key = NULL;
+    printf("done\n");
+
+    printf("Creating ACL file, ");
+    err = mifare_desfire_create_std_data_file(tag, nfclock_acl_file_id, MDCM_ENCIPHERED, nfclock_fileaccessrights(nfclock_acl_read_keyid, nfclock_acl_write_keyid, 0x0, 0x0), 4);
     if (err < 0)
     {
         goto RETRY;
     }
-     */
-    read = mifare_desfire_read_data(tag, nfclock_acl_file_id, 0, 4, uint32bytes);
-    if (read < 4)
+    printf("done\n");
+
+    printf("Writing ACL value (0), ");
+    err = nfclock_write_uint32(tag, nfclock_acl_file_id, 0x0);
+    if (err < 0)
     {
         goto RETRY;
     }
-    acl = (uint32bytes[0] | (uint32bytes[1] << 8) | (uint32bytes[2] << 16) | (uint32bytes[3] << 24));
-    printf("done, got 0x%lx \n", (unsigned long)acl);
+    printf("done\n");
+
+    printf("Creating member-id file, ");
+    err = mifare_desfire_create_std_data_file(tag, nfclock_mid_file_id, MDCM_ENCIPHERED, nfclock_fileaccessrights(nfclock_acl_read_keyid, 0x0, 0x0, 0x0), 4);
+    if (err < 0)
+    {
+        goto RETRY;
+    }
+    printf("done\n");
+
+
+    printf("Writing member-id value (0), ");
+    err = nfclock_write_uint32(tag, nfclock_mid_file_id, 0x0);
+    if (err < 0)
+    {
+        goto RETRY;
+    }
+    printf("done\n");
 
     // All checks done seems good
     if (realuid_str)
@@ -185,8 +306,9 @@ RETRY:
         realuid_str = NULL;
     }
     mifare_desfire_disconnect(tag);
-    *tag_valid = true;
+    *tag_valid = true; 
     return 0;
+
 
 FAIL:
     if (realuid_str)
@@ -287,6 +409,9 @@ int main(int argc, char *argv[])
 
     s_catch_signals();
 
+    null_des_key = mifare_desfire_des_key_new_with_version(key_data_null);
+    null_aes_key = mifare_desfire_aes_key_new_with_version(key_data_null16, 0x0);
+
     // Mainloop
     MifareTag *tags = NULL;
     while(!s_interrupted)
@@ -332,7 +457,7 @@ int main(int argc, char *argv[])
         
             /* pthread cond_timedwait expects an absolute time to wait until */
             clock_gettime(CLOCK_REALTIME, &abs_time);
-            abs_time.tv_sec += 1;
+            abs_time.tv_sec += 2;
         
             // Use this struct to pass data between thread and main
             struct thread_data tagdata;
@@ -376,17 +501,19 @@ int main(int argc, char *argv[])
         tags = NULL;
         if (valid_found)
         {
-            printf("OK: valid tag found\n");
+            printf("OK: tag pre-personalized\n");
         }
         else
         {
-            printf("ERROR: NO valid tag found\n");
+            printf("ERROR: problem pre-personalizing\n");
         }
 
         // And if we had tags then wait half a sec before resuming polling again
-        usleep(500 * 1000);
+        usleep(2500 * 1000);
     }
 
+    free(null_des_key);
+    free(null_aes_key);
     nfc_close (device);
     nfc_exit(nfc_ctx);
     exit(EXIT_SUCCESS);
