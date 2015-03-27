@@ -1,12 +1,17 @@
 # Makefile for micronfcboard
 GCC_BIN = 
+TARGET = TARGET_APPNEARME_MICRONFCBOARD
+TOOLCHAIN = TOOLCHAIN_GCC_ARM
 PROJECT = MICRONFCBOARD
-OBJECTS = 
-SYS_OBJECTS = 
-INCLUDE_PATHS = 
-LIBRARY_PATHS = 
-LIBRARIES = 
-LINKER_SCRIPT = 
+OBJECTS = main.o
+SYS_OBJECTS = mbed/$(TARGET)/$(TOOLCHAIN)/board.o mbed/$(TARGET)/$(TOOLCHAIN)/cmsis_nvic.o \
+	mbed/$(TARGET)/$(TOOLCHAIN)/retarget.o mbed/$(TARGET)/$(TOOLCHAIN)/startup_LPC11xx.o \
+	mbed/$(TARGET)/$(TOOLCHAIN)/system_LPC11Uxx.o
+INCLUDE_PATHS = -Imbed -Imbed/$(TARGET)/ -Imbed/$(TARGET)/TARGET_NXP/ -Imbed/$(TARGET)/TARGET_NXP/TARGET_LPC11UXX/ \
+	-Imbed/$(TARGET)/TARGET_NXP/TARGET_LPC11UXX/$(TARGET)/
+LIBRARY_PATHS = -Lmbed/$(TARGET)/$(TOOLCHAIN)
+LIBRARIES = -lmbed
+LINKER_SCRIPT = mbed/$(TARGET)/$(TOOLCHAIN)/LPC11U34.ld
 
 ############################################################################### 
 AS      = $(GCC_BIN)arm-none-eabi-as
@@ -20,7 +25,7 @@ SIZE 	= $(GCC_BIN)arm-none-eabi-size
 CPU = -mcpu=cortex-m0 -mthumb
 CC_FLAGS = $(CPU) -c -g -fno-common -fmessage-length=0 -Wall -fno-exceptions -ffunction-sections -fdata-sections -fomit-frame-pointer
 CC_FLAGS += -MMD -MP
-CC_SYMBOLS = -DTARGET_LPC11U35_401 -DTARGET_M0 -DTARGET_CORTEX_M -DTARGET_NXP -DTARGET_LPC11UXX -DTOOLCHAIN_GCC_ARM -DTOOLCHAIN_GCC -D__CORTEX_M0 -DARM_MATH_CM0 -DMBED_BUILD_TIMESTAMP=1427405354.12 -D__MBED__=1 
+CC_SYMBOLS = -DTARGET_APPNEARME_MICRONFCBOARD -DTARGET_M0 -DTARGET_CORTEX_M -DTARGET_NXP -DTARGET_LPC11UXX -D$(TOOLCHAIN) -DTOOLCHAIN_GCC -D__CORTEX_M0 -DARM_MATH_CM0 -DMBED_BUILD_TIMESTAMP=1427405354.12 -D__MBED__=1 
 
 LD_FLAGS = $(CPU) -Wl,--gc-sections --specs=nano.specs -Wl,--wrap,main
 #LD_FLAGS += -u _printf_float -u _scanf_float
