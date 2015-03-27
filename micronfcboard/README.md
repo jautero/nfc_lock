@@ -1,5 +1,10 @@
-NFC Key Reader for Micronfcboard
+NFC Key Reader for MicroNFCBoard
 ================================
 
-This is software for micronfcboard that will read uid from lab key and return it over USB.
+This is micronfcboard firmware for handling NFC Lock keyfobs.
 
+Planned Features
+----------------
+
+* Reading real UID from card
+* USB NFC reader
