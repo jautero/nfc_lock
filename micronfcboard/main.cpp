@@ -1,15 +1,11 @@
 #include "mbed.h"
-#include "USBSerial.h"
+#include "USBKeyboard.h"
 
 DigitalOut myled(LED1);
-USBSerial pc;
+USBKeyboard pc;
 
 int main() {
     while(1) {
-        myled = 1;
-        wait(0.2);
-        myled = 0;
-        wait(0.2);
-        pc.printf("HelloWorld!");
+        pc.printf("1337 H4X0R!\n");
     }
 }
