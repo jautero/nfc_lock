@@ -8,9 +8,9 @@ SYS_OBJECTS = mbed/$(TARGET)/$(TOOLCHAIN)/board.o mbed/$(TARGET)/$(TOOLCHAIN)/cm
 	mbed/$(TARGET)/$(TOOLCHAIN)/retarget.o mbed/$(TARGET)/$(TOOLCHAIN)/startup_LPC11xx.o \
 	mbed/$(TARGET)/$(TOOLCHAIN)/system_LPC11Uxx.o
 INCLUDE_PATHS = -Imbed -Imbed/$(TARGET)/ -Imbed/$(TARGET)/TARGET_NXP/ -Imbed/$(TARGET)/TARGET_NXP/TARGET_LPC11UXX/ \
-	-Imbed/$(TARGET)/TARGET_NXP/TARGET_LPC11UXX/$(TARGET)/
-LIBRARY_PATHS = -Lmbed/$(TARGET)/$(TOOLCHAIN)
-LIBRARIES = -lmbed
+	-Imbed/$(TARGET)/TARGET_NXP/TARGET_LPC11UXX/$(TARGET)/ -Iusb/USBDevice/ -Iusb/USBSerial/ 
+LIBRARY_PATHS = -Lmbed/$(TARGET)/$(TOOLCHAIN) -Lusb/$(TARGET)/$(TOOLCHAIN)
+LIBRARIES = -lmbed -lUSBDevice
 LINKER_SCRIPT = mbed/$(TARGET)/$(TOOLCHAIN)/LPC11U34.ld
 
 ############################################################################### 
