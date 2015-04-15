@@ -1,14 +1,19 @@
 # Makefile for micronfcboard
 GCC_BIN = 
+RUBY=ruby
+UNITYDIR=$(VIRTUAL_ENV)/Unity
 TARGET = TARGET_APPNEARME_MICRONFCBOARD
 TOOLCHAIN = TOOLCHAIN_GCC_ARM
 PROJECT = MICRONFCBOARD
 OBJECTS = main.o
+TDD_OBJECTS = $(UNITYDIR)/src/unity.o Tests.o Tests_runner.o
 SYS_OBJECTS = mbed/$(TARGET)/$(TOOLCHAIN)/board.o mbed/$(TARGET)/$(TOOLCHAIN)/cmsis_nvic.o \
 	mbed/$(TARGET)/$(TOOLCHAIN)/retarget.o mbed/$(TARGET)/$(TOOLCHAIN)/startup_LPC11xx.o \
 	mbed/$(TARGET)/$(TOOLCHAIN)/system_LPC11Uxx.o
 INCLUDE_PATHS = -Imbed -Imbed/$(TARGET)/ -Imbed/$(TARGET)/TARGET_NXP/ -Imbed/$(TARGET)/TARGET_NXP/TARGET_LPC11UXX/ \
-	-Imbed/$(TARGET)/TARGET_NXP/TARGET_LPC11UXX/$(TARGET)/ -Iusb/USBDevice/ -Iusb/USBSerial/ -Iusb/USBHID/
+	-Imbed/$(TARGET)/TARGET_NXP/TARGET_LPC11UXX/$(TARGET)/ -Iusb/USBDevice/ -Iusb/USBSerial/ -Iusb/USBHID/ \
+	-I$(UNITYDIR)/src
+	
 LIBRARY_PATHS = -Lmbed/$(TARGET)/$(TOOLCHAIN) -Lusb/$(TARGET)/$(TOOLCHAIN)
 LIBRARIES = -lmbed -lUSBDevice
 LINKER_SCRIPT = mbed/$(TARGET)/$(TOOLCHAIN)/LPC11U34.ld
@@ -52,19 +57,25 @@ clean:
 .cpp.o:
 	$(CPP) $(CC_FLAGS) $(CC_SYMBOLS) -std=gnu++98 -fno-rtti $(INCLUDE_PATHS) -o $@ $<
 
+%_runner.c: %.cpp
+	$(RUBY) $(UNITYDIR)/auto/generate_test_runner.rb $< $@
 
 $(PROJECT).elf: $(OBJECTS) $(SYS_OBJECTS)
 	$(LD) $(LD_FLAGS) -T$(LINKER_SCRIPT) $(LIBRARY_PATHS) -o $@ $^ $(LIBRARIES) $(LD_SYS_LIBS) $(LIBRARIES) $(LD_SYS_LIBS)
 	$(SIZE) $@
 
-$(PROJECT).bin: $(PROJECT).elf
+TDD.elf: $(TDD_OBJECTS) $(SYS_OBJECTS)
+	$(LD) $(LD_FLAGS) -T$(LINKER_SCRIPT) $(LIBRARY_PATHS) -o $@ $^ $(LIBRARIES) $(LD_SYS_LIBS) $(LIBRARIES) $(LD_SYS_LIBS)
+	$(SIZE) $@
+	
+%.bin: %.elf
 	@$(OBJCOPY) -O binary $< $@
 	@python ./patchtool.py $@
 
-$(PROJECT).hex: $(PROJECT).elf
+%.hex: %.elf
 	@$(OBJCOPY) -O ihex $< $@
 
-$(PROJECT).lst: $(PROJECT).elf
+%.lst: %.elf
 	@$(OBJDUMP) -Sdh $< > $@
 
 lst: $(PROJECT).lst
