@@ -1,8 +1,9 @@
 #include "Tests.h"
+#include "PN512Interface.h"
+
 extern "C" {
     #include "unity.h"
 }
-#include "PN512Interface.h"
 
 void testLED() {
     DigitalOut led1(LED1);
@@ -21,12 +22,13 @@ void testLED() {
 
 const int PN512VersionReg=0x37;
 const int PN512Version=0x82; 
+
+DigitalOut cs(P1_19);
+SPI spi(P0_21,P0_22,P1_15);
     
 void testSPIVersion() 
 {
-    DigitalOut cs(P1_19);
-    SPI spi(P0_21,P0_22,P1_15);
-    int ret;
+   int ret;
     cs=1;
     spi.format(8, 0);
     spi.frequency(1000000);
@@ -39,5 +41,5 @@ void testSPIVersion()
 
 void testPN512Interface()
 {
-    PN512Interface iface;
+    PN512Interface iface(spi,P1_19);
 }
