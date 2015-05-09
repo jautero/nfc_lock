@@ -7,7 +7,8 @@ TOOLCHAIN = TOOLCHAIN_GCC_ARM
 PROJECT = MICRONFCBOARD
 COMMON_OBJECTS = PN512Interface.o
 OBJECTS = main.o $(COMMON_OBJECTS)
-TDD_OBJECTS = Tests_runner.o test_output.o Tests.o $(UNITYDIR)/src/unity.o $(COMMON_OBJECTS)
+TEST_OBJECTS = Tests_runner.o test_output.o Tests.o $(UNITYDIR)/src/unity.o $(COMMON_OBJECTS)
+TEST_FIRMWARE = test-firmware
 SYS_OBJECTS = mbed/$(TARGET)/$(TOOLCHAIN)/board.o mbed/$(TARGET)/$(TOOLCHAIN)/cmsis_nvic.o \
 	mbed/$(TARGET)/$(TOOLCHAIN)/retarget.o mbed/$(TARGET)/$(TOOLCHAIN)/startup_LPC11xx.o \
 	mbed/$(TARGET)/$(TOOLCHAIN)/system_LPC11Uxx.o
@@ -65,7 +66,7 @@ $(PROJECT).elf: $(OBJECTS) $(SYS_OBJECTS)
 	$(LD) $(LD_FLAGS) -T$(LINKER_SCRIPT) $(LIBRARY_PATHS) -o $@ $^ $(LIBRARIES) $(LD_SYS_LIBS) $(LIBRARIES) $(LD_SYS_LIBS)
 	$(SIZE) $@
 
-TDD.elf: $(TDD_OBJECTS) $(SYS_OBJECTS)
+$(TEST_FIRMWARE).elf: $(TEST_OBJECTS) $(SYS_OBJECTS)
 	$(LD) $(LD_FLAGS) -T$(LINKER_SCRIPT) $(LIBRARY_PATHS) -o $@ $^ $(LIBRARIES) $(LD_SYS_LIBS) $(LIBRARIES) $(LD_SYS_LIBS)
 	$(SIZE) $@
 	
@@ -84,12 +85,7 @@ lst: $(PROJECT).lst
 size:
 	$(SIZE) $(PROJECT).elf
 
-deploy: TDD.bin
-	cp TDD.bin /Volumes/CRP*/firmware.bin
-
-tdd: deploy
-	diskutil eject /Volumes/CRP*
-	python run-tdd.py
-	
+tests: $(TEST_FIRMWARE).bin
+		
 DEPS = $(OBJECTS:.o=.d) $(SYS_OBJECTS:.o=.d)
 -include $(DEPS)
