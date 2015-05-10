@@ -7,7 +7,7 @@ TOOLCHAIN = TOOLCHAIN_GCC_ARM
 PROJECT = MICRONFCBOARD
 COMMON_OBJECTS = PN512Interface.o
 OBJECTS = main.o $(COMMON_OBJECTS)
-TEST_OBJECTS = Tests_runner.o test_output.o Tests.o $(UNITYDIR)/src/unity.o $(COMMON_OBJECTS)
+TEST_OBJECTS = Tests_runner.o test_output.o Tests.o $(UNITYDIR)/src/unity.o TestPN512Interface.o $(COMMON_OBJECTS)
 TEST_FIRMWARE = test-firmware
 SYS_OBJECTS = mbed/$(TARGET)/$(TOOLCHAIN)/board.o mbed/$(TARGET)/$(TOOLCHAIN)/cmsis_nvic.o \
 	mbed/$(TARGET)/$(TOOLCHAIN)/retarget.o mbed/$(TARGET)/$(TOOLCHAIN)/startup_LPC11xx.o \

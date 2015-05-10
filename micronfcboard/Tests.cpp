@@ -1,5 +1,5 @@
 #include "Tests.h"
-#include "PN512Interface.h"
+#include "TestPN512Interface.h"
 
 extern "C" {
     #include "unity.h"
@@ -41,5 +41,9 @@ void testSPIVersion()
 
 void testPN512Interface()
 {
-    PN512Interface iface(spi,P1_19);
+    TestPN512Interface iface(spi,P1_19);
+    iface.testRegToSPIAddress();
+    iface.testVersionReg(PN512VersionReg,PN512Version);
+    iface.testFIFO();
+    iface.testReset();
 }

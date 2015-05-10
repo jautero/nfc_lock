@@ -9,11 +9,17 @@ class PN512Interface
 {
 public:
     PN512Interface (SPI &spi, PinName SS);
-    virtual ~PN512Interface ();
+    virtual ~PN512Interface();
+    int read(int reg);
+    void write(int reg,int value);
 
 private:
     SPI *_spi;
     DigitalOut _ss;
+    
+    int regToSPIAddress(int reg, bool read);
+    
+    friend class TestPN512Interface;
 };
 #endif /* RUN_TEST */
 
