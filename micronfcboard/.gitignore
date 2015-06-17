@@ -1,0 +1,8 @@
+*.d
+*.o
+*.elf
+*.hex
+*.bin
+*.tgz
+*.map
+.idea

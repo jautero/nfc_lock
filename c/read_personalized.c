@@ -48,6 +48,9 @@ int handle_tag(MifareTag tag, bool *tag_valid)
     uint8_t diversified_key_data[16];
     uint32_t acl;
     uint32_t mid;
+    size_t read;
+    uint8_t uint32bytes[4];
+    
 
 RETRY:
     if (err != 0)
@@ -141,22 +144,39 @@ RETRY:
     key = NULL;
     printf("done\n");
 
-    printf("Reading ACL file, ");
-    err = nfclock_read_uint32(tag, nfclock_acl_file_id, &acl);
-    if (err < 0)
-    {
-        goto RETRY;
-    }
-    printf("done, got 0x%lx \n", (unsigned long)acl);
-
-
     printf("Reading member-id file, ");
+    /** 
+     * This triggers stack-smashing detector for some reason...
     err = nfclock_read_uint32(tag, nfclock_mid_file_id, &mid);
     if (err < 0)
     {
         goto RETRY;
     }
+     */
+    read = mifare_desfire_read_data(tag, nfclock_mid_file_id, 0, 4, uint32bytes);
+    if (read < 4)
+    {
+        goto RETRY;
+    }
+    mid = (uint32bytes[0] | (uint32bytes[1] << 8) | (uint32bytes[2] << 16) | (uint32bytes[3] << 24));
     printf("done, got 0x%lx \n", (unsigned long)mid);
+
+    printf("Reading ACL file, ");
+    /** 
+     * This triggers stack-smashing detector for some reason...
+    err = nfclock_read_uint32(tag, nfclock_acl_file_id, &acl);
+    if (err < 0)
+    {
+        goto RETRY;
+    }
+     */
+    read = mifare_desfire_read_data(tag, nfclock_acl_file_id, 0, 4, uint32bytes);
+    if (read < 4)
+    {
+        goto RETRY;
+    }
+    acl = (uint32bytes[0] | (uint32bytes[1] << 8) | (uint32bytes[2] << 16) | (uint32bytes[3] << 24));
+    printf("done, got 0x%lx \n", (unsigned long)acl);
 
     // All checks done seems good
     if (realuid_str)

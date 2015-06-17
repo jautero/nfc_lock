@@ -100,10 +100,21 @@ RETRY:
     err = mifare_desfire_authenticate(tag, 0, key);
     if (err < 0)
     {
+        free(key);
+        key = NULL;
         goto RETRY;
     }
+    free(key);
+    key = NULL;
     printf("done\n");
 
+    printf("Getting real UID, ");
+    err = mifare_desfire_get_card_uid(tag, &realuid_str);
+    if (err < 0)
+    {
+        goto RETRY;
+    }
+    printf("%s\n", realuid_str);
 
     printf("Writing ACL value (0x%lx), ", (unsigned long)newacl);
     err = nfclock_write_uint32(tag, nfclock_acl_file_id, newacl);
@@ -122,8 +133,10 @@ RETRY:
     }
     printf("done\n");
 
-    
-    // TODO: pretty-print the result (real UID, acl and mid)
+    printf("\n*** Write the following down ***\n");
+    printf("  UID: %s\n", realuid_str);
+    printf("  MID: 0x%lx\n", (unsigned long)newmid);
+    printf("*** Write the above down ***\n\n");
 
     // All checks done seems good
     if (realuid_str)
@@ -278,9 +291,17 @@ int main(int argc, char *argv[])
             // Use this struct to pass data between thread and main
             struct thread_data tagdata;
             tagdata.tag = tags[i];
-            // TODO: Ask for new ACL and mid in hex format from user and decode to uint32
             tagdata.newacl = 0;
             tagdata.newmid = 0;
+            
+            // Asking for mid (ACL is redundant, we can update it at smart node anyway)
+            char input_buffer[20];
+            fputs("enter mid (in hex format eg 0xdeadbeef): ", stdout);
+            fflush(stdout);
+            if ( fgets(input_buffer, sizeof input_buffer, stdin) != NULL )
+            {
+                tagdata.newmid = strtoul(input_buffer, NULL, 0);
+            }
 
             // pthreads initialization stuff
             struct timespec abs_time;
@@ -289,7 +310,7 @@ int main(int argc, char *argv[])
         
             /* pthread cond_timedwait expects an absolute time to wait until */
             clock_gettime(CLOCK_REALTIME, &abs_time);
-            abs_time.tv_sec += 1;
+            abs_time.tv_sec += 2;
         
         
             err = pthread_create(&tid, NULL, handle_tag_pthread, (void *)&tagdata);
@@ -331,14 +352,14 @@ int main(int argc, char *argv[])
         if (valid_found)
         {
             printf("OK: tag personalized\n");
+            usleep(2500 * 1000);
         }
         else
         {
             printf("ERROR: problem personalizing\n");
+            usleep(500 * 1000);
         }
 
-        // And if we had tags then wait half a sec before resuming polling again
-        usleep(2500 * 1000);
     }
 
     nfc_close (device);
