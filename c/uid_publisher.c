@@ -15,7 +15,7 @@
 #include <nfc/nfc.h>
 #include <freefare.h>
 
-#include "smart_node_config.h"
+#include "acl_config.h"
 #include "keydiversification.h"
 #include "helpers.h"
 

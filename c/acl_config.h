@@ -1,7 +1,7 @@
-#ifndef NFCLOCK_SMARTNODE_CONFIG_H
-#define NFCLOCK_SMARTNODE_CONFIG_H
+#ifndef NFCLOCK_ACL_CONFIG_H
+#define NFCLOCK_ACL_CONFIG_H
 #include <stdint.h>
-#include "dumb_node_config.h"
+#include "uid_config.h"
 
 extern const uint8_t nfclock_acl_file_id;
 extern const uint8_t nfclock_mid_file_id;

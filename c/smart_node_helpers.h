@@ -7,7 +7,7 @@
 #include <stdlib.h> //realloc
 
 #include "keydiversification.h"
-#include "smart_node_config.h"
+#include "acl_config.h"
 #include "helpers.h"
 
 

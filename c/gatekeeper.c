@@ -21,7 +21,7 @@
 #include "smart_node_helpers.h"
 /**
  * Loaded by smart_node_helpers
-#include "smart_node_config.h"
+#include "acl_config.h"
  */
 #include "helpers.h"
 

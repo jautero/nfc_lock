@@ -1,4 +1,4 @@
-#include "smart_node_config.h"
+#include "acl_config.h"
 
 nfclock_acl_file_id = 0x0;
 nfclock_mid_file_id = 0x1;

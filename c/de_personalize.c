@@ -15,7 +15,7 @@
 #include <nfc/nfc.h>
 #include <freefare.h>
 
-#include "pre-personalize_config.h"
+#include "master-key_config.h"
 #include "keydiversification.h"
 
 
