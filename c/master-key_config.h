@@ -1,8 +1,8 @@
-#ifndef NFCLOCK_PREPERSONALIZE_CONFIG_H
-#define NFCLOCK_PREPERSONALIZE_CONFIG_H
+#ifndef NFCLOCK_MASTERKEY_CONFIG_H
+#define NFCLOCK_MASTERKEY_CONFIG_H
 #include <stdint.h>
-#include "dumb_node_config.h"
-#include "smart_node_config.h"
+#include "uid_config.h"
+#include "acl_config.h"
 
 // Application Master Key (ID 0x0 after application has been selected)
 extern const uint8_t nfclock_amk[16];

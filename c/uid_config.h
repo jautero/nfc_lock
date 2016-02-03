@@ -1,5 +1,5 @@
-#ifndef NFCLOCK_DUMBNODE_CONFIG_H
-#define NFCLOCK_DUMBNODE_CONFIG_H
+#ifndef NFCLOCK_UID_CONFIG_H
+#define NFCLOCK_UID_CONFIG_H
 #include <stdint.h>
 
 extern const uint8_t nfclock_aid[3];

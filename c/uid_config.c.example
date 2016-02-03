@@ -1,4 +1,4 @@
-#include "dumb_node_config.h"
+#include "uid_config.h"
 
 const uint8_t nfclock_aid[3] = { 0x37, 0x13, 0x03 };
 const uint8_t nfclock_uid_keyid = 0x01;

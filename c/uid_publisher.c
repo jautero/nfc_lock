@@ -65,10 +65,10 @@ RETRY:
         // TODO: resolve error string
         if (errcnt > errlimit)
         {
-            printf("failed (%s), retry-limit exceeded (%d/%d), skipping tag\n", freefare_strerror(tag), errcnt, errlimit);
+            log_error("failed (%s), retry-limit exceeded (%d/%d), skipping tag\n", freefare_strerror(tag), errcnt, errlimit);
             goto FAIL;
         }
-        printf("failed (%s), retrying (%d)\n", freefare_strerror(tag), errcnt);
+        log_warning("failed (%s), retrying (%d)\n", freefare_strerror(tag), errcnt);
     }
     if (connected)
     {
@@ -76,107 +76,50 @@ RETRY:
         connected = false;
     }
 
-    printf("Connecting, ");
+    log_info("Connecting, ");
     err = mifare_desfire_connect(tag);
     if (err < 0)
     {
-        printf("Can't connect to Mifare DESFire target.");
+        log_error("Can't connect to Mifare DESFire target.");
         goto RETRY;
     }
-    printf("done\n");
     connected = true;
 
-    printf("Selecting application, ");
+    log_info("Selecting application, ");
     aid = mifare_desfire_aid_new(nfclock_aid[0] | (nfclock_aid[1] << 8) | (nfclock_aid[2] << 16));
     err = mifare_desfire_select_application(tag, aid);
     if (err < 0)
     {
         free(aid);
         aid = NULL;
-        printf("Can't select application.");
+        log_error("Can't select application.");
         goto RETRY;
     }
-    printf("done\n");
     free(aid);
     aid = NULL;
 
-    printf("Authenticating, ");
+    log_info("Authenticating, ");
     key = mifare_desfire_aes_key_new_with_version((uint8_t*)&nfclock_uid_key, 0x0);
     err = mifare_desfire_authenticate(tag, nfclock_uid_keyid, key);
     if (err < 0)
     {
         free(key);
         key = NULL;
-        printf("Can't Authenticate. ");
+        log_error("Can't Authenticate. ");
         goto RETRY;
     }
     free(key);
     key = NULL;
-    printf("done\n");
 
-    printf("Getting real UID, ");
+    log_info("Getting real UID, ");
     err = mifare_desfire_get_card_uid(tag, &realuid_str);
     if (err < 0)
     {
-        printf("Can't get real UID. ");
+        Log_error("Can't get real UID. ");
         goto RETRY;
     }
-    printf("%s\n", realuid_str);
-
-    err = nfclock_diversify_key_aes128((uint8_t *)nfclock_acl_read_key_base, (uint8_t*)nfclock_aid, realuid_str, (uint8_t*)nfclock_sysid, sizeof(nfclock_sysid), diversified_key_data);
-    if (err != 0)
-    {
-        printf("Can't calculate diversified key, failing\n");
-        goto FAIL;
-    }
-
-    printf("Re-auth with ACL read key, ");
-    key = mifare_desfire_aes_key_new_with_version((uint8_t*)diversified_key_data, 0x0);
-    err = mifare_desfire_authenticate(tag, nfclock_acl_read_keyid, key);
-    if (err < 0)
-    {
-        free(key);
-        key = NULL;
-        printf("Can't Authenticate. ");
-        goto RETRY;
-    }
-    free(key);
-    key = NULL;
-    printf("done\n");
-
-    printf("Reading member-id file, ");
-    /** 
-     * This triggers stack-smashing detector for some reason...
-    err = nfclock_read_uint32(tag, nfclock_mid_file_id, &mid);
-    if (err < 0)
-    {
-        goto RETRY;
-    }
-     */
-    read = mifare_desfire_read_data(tag, nfclock_mid_file_id, 0, 4, uint32bytes);
-    if (read < 4)
-    {
-        goto RETRY;
-    }
-    mid = (uint32bytes[0] | (uint32bytes[1] << 8) | (uint32bytes[2] << 16) | (uint32bytes[3] << 24));
-    printf("done, got 0x%lx \n", (unsigned long)mid);
-
-    printf("Reading ACL file, ");
-    /** 
-     * This triggers stack-smashing detector for some reason...
-    err = nfclock_read_uint32(tag, nfclock_acl_file_id, &acl);
-    if (err < 0)
-    {
-        goto RETRY;
-    }
-     */
-    read = mifare_desfire_read_data(tag, nfclock_acl_file_id, 0, 4, uint32bytes);
-    if (read < 4)
-    {
-        goto RETRY;
-    }
-    acl = (uint32bytes[0] | (uint32bytes[1] << 8) | (uint32bytes[2] << 16) | (uint32bytes[3] << 24));
-    printf("done, got 0x%lx \n", (unsigned long)acl);
+    log_debug("%s\n", realuid_str);
+    
 
     // All checks done seems good
     if (realuid_str)
