@@ -1,2 +1,2 @@
 def testKeydiversification():
-    pass
+    assert False
